@@ -11,6 +11,8 @@ Source of the Dai and al. paper:
 }
 ```
 
+The code is mainly refered to Louis's code: https://github.com/louisv123/COLGE, some details are from Dai's code:https://github.com/Hanjun-Dai/graph_comb_opt, with a little personal modifier.
+
 ## Introduction
 
 The goal of this study is to implement the work done by Dai and al. who developed a uniﬁed framework to solve combinatorial optimization problem over graph through learning. The model is trained on batch of graphs from a `Erdös-Rényi` and a `Barabási–Albert` degree distribution, with a ﬁx number of node. Firstly, the algorithm learns the structure of the graph through a graph embedding algorithm. A helping function provides as an input the current state of progress of the optimisation. Then it chooses the best node to add to the optimal set through a reinforcement learning algorithm. I have worked on two combinatorial optimization problems, `Minimum Vertex Cover (MVC) ` and `Maximum Cut Set (MAXCUT)`.
