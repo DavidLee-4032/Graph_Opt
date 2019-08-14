@@ -59,7 +59,6 @@ class S2V_QN_1(torch.nn.Module):
                 # after pooling
                 for i in range(self.len_post_pooling):
                     mu_pool = self.list_post_pooling[i](mu_pool).clamp(0)
-
                 mu_2 = self.mu_2(mu_pool)
                 mu = torch.add(mu_1, mu_2).clamp(0)
         xv1=torch.ones_like(xv)

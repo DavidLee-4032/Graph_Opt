@@ -136,7 +136,7 @@ class DQAgent:
                 action = np.random.choice(np.where(observation.numpy()[0,:,0] == 0)[0])
             else:
                 adj_max = torch.from_numpy(self.adj).type(torch.FloatTensor).view(1,self.node_max,self.node_max)
-                q_a = self.model(observation, adj_max).cpu()
+                q_a = self.model.forward(observation, adj_max).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
                 q_a=q_a.numpy()
                 action = np.where((q_a[0, :, 0] == np.max(q_a[0, :, 0][observation.numpy()[0, :, 0] == 0])))[0][0]
             obs_tmp = self.env.observe().clone() # Using LOCAL variables to prevent unexpected changes of variables
@@ -145,11 +145,19 @@ class DQAgent:
             self.iter += 1
         return (reward, done)
 
+    def permutation(self, xv):
+        permu1=list(range(self.node_max))
+        permu2=random.sample(permu1, len(xv))
+        p=np.zeros(len(xv), self.node_max)
+        for i in range(lex(xv)):
+            p[i,permu2[i]]=1
+        #p:permutation matrix
+
 
 
     def renew(self,recent):
             # Warning: you should play the game several times (such as 1000) to start the optimizing process.
-        if recent:
+        if recent:#choose the recent rounds?
             exp_sam = random.sample(self.memory_n[:-20], self.minibatch_length-20)
             exp_sam_2=self.memory_n[-20:]
             exp_sam=exp_sam+exp_sam_2
@@ -169,7 +177,6 @@ class DQAgent:
             obs_tens[i]=exp_sam[i][3]#torch.zeros(1, 2).scatter_(1, exp_sam[i][3], 1)
             done_tens[i]=int(exp_sam[i][4])
             adj_tens[i] = torch.from_numpy(self.graphs[exp_sam[i][5]].adj()).type(torch.FloatTensor)
-        #(last_observation_tens, action_tens, reward_tens, observation_tens, done_tens, adj_tens) = self.get_sample() 1 action with 1 renewing, have 32 samples.
         self.optimizer.zero_grad()
         with torch.no_grad():
             m1=self.model(obs_tens.to(self.device), adj_tens.to(self.device)).cpu()
@@ -183,8 +190,6 @@ class DQAgent:
             print(loss)
         loss.backward()
         self.optimizer.step()
-
-            #self.epsilon = self.eps_end + max(0., (self.eps_start- self.eps_end) * (self.eps_step - self.t) / self.eps_step)
         if self.epsilon_ > self.epsilon_min:
            self.epsilon_ *= self.discount_factor
 

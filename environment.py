@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import pulp
-
+import networkx as nx
 """
 This file contains the definition of the environment
 in which the agents are run.
@@ -14,62 +14,72 @@ class Environment:
         self.name = name
 
     def graph_reset(self,graphs):
-        #if(self.graphs):self.graphs.clear()
         self.graphs = graphs
         
-
     def reset(self, g):
         self.games = g
         self.graph_init = self.graphs[self.games]
         self.nodes = self.graph_init.nodes()
-        self.nbr_of_nodes = 0
-        self.edge_add_old = 0
+        self.nodes_count = 0
+        self.edge_cover_count = 0
         self.last_reward = 0
         self.observation = torch.zeros(1,self.nodes,1,dtype=torch.float)
-
+        self.active_array=np.zeros(self.nodes,self.nodes)
     def observe(self):
         """Returns the current observation that the agent can make
                  of the environment, if applicable.
         """
+        #This is a non-random instance
         return self.observation
+
+    def fully_covered(self):
+        done=True
+        edge_sum=0
+        for edge in self.graph_init.edges():
+            if self.observation[:,edge[0],:]==0 and self.observation[:,edge[1],:]==0:
+                done=False
+            else:
+                edge_sum += 1
+        return(done,edge_sum)
+
+    def active_pts_sol(self):
+        actpts=np.zeros(self.graph_init.number_of_nodes(),dtype=torch.int32)
+        for node in self.graph_init.nodes():
+            if node in self.observation:
+                continue
+            else:
+                if nx.all_neighbors(self.graph_init,node) in self.observation:
+                    continue
+            actpts[node]=1
+        return actpts
 
     def act(self,node):
 
         self.observation[:,node,:]=1
-        reward,done = self.get_reward(self.observation, node)
+        reward,done = self.get_reward(node)
         return reward,done
 
-    def get_reward(self, observation, node):
+    def get_reward(self, node, observation=None):
+        if not observation: #This function can use inner or outer parameters
+            observation=self.observation
 
         if self.name == "MVC":
-
-            new_nbr_nodes=np.sum(observation[0].numpy())
-
-            if new_nbr_nodes - self.nbr_of_nodes > 0:
-                reward = -1#np.round(-1.0/20.0,3)
+            nodes_count=np.sum(observation[0].numpy())
+            if self.nodes_count != nodes_count:
+                reward = -1
             else:
                 reward = 0
-
-            self.nbr_of_nodes=new_nbr_nodes
-
-            #Minimum vertex set:
-
+            self.nodes_count=nodes_count
+            """
             done = True
-
-            edge_add = 0
-
+            edge_sum = 0
             for edge in self.graph_init.edges():
                 if observation[:,edge[0],:]==0 and observation[:,edge[1],:]==0:
                     done=False
-                    # break
                 else:
-                    edge_add += 1
-
-            #reward = ((edge_add - self.edge_add_old) / np.max(
-            #   [1, self.graph_init.average_neighbor_degree([node])[node]]) - 10)/100
-
-            self.edge_add_old = edge_add
-
+                    edge_sum += 1
+            """
+            (done,self.edge_cover_count)=self.fully_covered()
             return (reward,done)
 
         elif self.name=="MAXCUT" :
@@ -172,3 +182,5 @@ class Environment:
 
             return mdl.objective.value()
 
+
+        

@@ -37,7 +37,7 @@ class Runner:
         cumul_sol_train=0.0
             #self.agent.graph_reset(self.graph_list)
         for g in range(games):
-            self.agent.reset(g) 
+            self.agent.reset(g)
             cumul_reward = 0.0
             
             for i in range(1, max_iter + 1): #mat iter:
@@ -52,7 +52,6 @@ class Runner:
                     cumul_opti += optimal_sol
                         #print(" ->    Optimal solution = {}".format(optimal_sol))
                     assert(optimal_sol!=0)
-                        #if optimal_sol==0: print("OptiZeroException")
                         #we add in a list the solution found by the NN algorithm
                     cumul_sol-=cumul_reward
                         #list_cumul_reward.append(-cumul_reward)
