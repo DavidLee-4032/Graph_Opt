@@ -42,7 +42,7 @@ class Environment:
                 edge_sum += 1
         return(done,edge_sum)
 
-    def active_pts_sol(self):
+    def active_pts_sol(self):#return the active points
         actpts=np.zeros(self.graph_init.number_of_nodes(),dtype=torch.int32)
         for node in self.graph_init.nodes():
             if node in self.observation:

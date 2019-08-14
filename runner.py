@@ -20,6 +20,7 @@ class Runner:
 
     def act(self):
         observation = self.agent.env.observe()#.clone()
+        self.agent.adj=
         (reward, done) = self.agent.act(observation)#.copy()
         return (reward, done)
 

@@ -145,15 +145,22 @@ class DQAgent:
             self.iter += 1
         return (reward, done)
 
+    def adj_sub(self):
+        actpt=self.env.active_pts_sol()
+        I=np.zeros(self.nodes, self.nodes)
+        for i in range(self.nodes):
+            if actpt[i]==1:
+                I[i,i]=1
+        return I
+        
     def permutation(self, xv):
         permu1=list(range(self.node_max))
         permu2=random.sample(permu1, len(xv))
-        p=np.zeros(len(xv), self.node_max)
-        for i in range(lex(xv)):
-            p[i,permu2[i]]=1
+        P=np.zeros(len(xv), self.node_max)
+        for i in range(len(xv)):
+            P[i,permu2[i]]=1
+        return P
         #p:permutation matrix
-
-
 
     def renew(self,recent):
             # Warning: you should play the game several times (such as 1000) to start the optimizing process.
