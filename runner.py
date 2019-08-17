@@ -19,10 +19,10 @@ class Runner:
         self.agent.graph_reset(graphs)
 
     def act(self):
-        observation = self.agent.env.observe()#.clone()
-        self.agent.adj=
-        (reward, done) = self.agent.act(observation)#.copy()
-        return (reward, done)
+        (observation, aux) = self.agent.env.observe()#.clone()
+        permu=self.agent.permutation(observation)
+        (reward, done) = self.agent.act(permu, aux)#.copy()
+        return (reward, done, aux)
 
 
 
@@ -40,7 +40,6 @@ class Runner:
         for g in range(games):
             self.agent.reset(g)
             cumul_reward = 0.0
-            
             for i in range(1, max_iter + 1): #mat iter:
                 (rew, done) = self.act()
                 cumul_reward += rew

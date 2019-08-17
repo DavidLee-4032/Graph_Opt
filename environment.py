@@ -19,18 +19,19 @@ class Environment:
     def reset(self, g):
         self.games = g
         self.graph_init = self.graphs[self.games]
-        self.nodes = self.graph_init.nodes()
-        self.nodes_count = 0
+        self.nodes_count = self.graph_init.nodes()
+        self.edges_count=self.graph_init.g.number_of_edges()
+        self.nodes_selected = 0
         self.edge_cover_count = 0
         self.last_reward = 0
-        self.observation = torch.zeros(1,self.nodes,1,dtype=torch.float)
-        self.active_array=np.zeros(self.nodes,self.nodes)
+        self.observation = torch.zeros(1,self.nodes_count,1,dtype=torch.float)
     def observe(self):
         """Returns the current observation that the agent can make
                  of the environment, if applicable.
         """
         #This is a non-random instance
-        return self.observation
+        aux=[1.0*self.nodes_selected/self.nodes_count, 1.0*self.edge_cover_count/self.edges_count, 1.0]
+        return (self.observation,aux)
 
     def fully_covered(self):
         done=True
@@ -42,19 +43,7 @@ class Environment:
                 edge_sum += 1
         return(done,edge_sum)
 
-    def active_pts_sol(self):#return the active points
-        actpts=np.zeros(self.graph_init.number_of_nodes(),dtype=torch.int32)
-        for node in self.graph_init.nodes():
-            if node in self.observation:
-                continue
-            else:
-                if nx.all_neighbors(self.graph_init,node) in self.observation:
-                    continue
-            actpts[node]=1
-        return actpts
-
     def act(self,node):
-
         self.observation[:,node,:]=1
         reward,done = self.get_reward(node)
         return reward,done
@@ -64,29 +53,18 @@ class Environment:
             observation=self.observation
 
         if self.name == "MVC":
-            nodes_count=np.sum(observation[0].numpy())
-            if self.nodes_count != nodes_count:
+            nodes_selected=np.sum(observation[0].numpy())
+            if self.nodes_selected != nodes_selected:
                 reward = -1
             else:
                 reward = 0
-            self.nodes_count=nodes_count
-            """
-            done = True
-            edge_sum = 0
-            for edge in self.graph_init.edges():
-                if observation[:,edge[0],:]==0 and observation[:,edge[1],:]==0:
-                    done=False
-                else:
-                    edge_sum += 1
-            """
+            self.nodes_selected=nodes_selected
             (done,self.edge_cover_count)=self.fully_covered()
             return (reward,done)
 
         elif self.name=="MAXCUT" :
-
             reward=0
             done=False
-
             adj= self.graph_init.edges()
             select_node=np.where(self.observation[0, :, 0].numpy() == 1)[0]
             for nodes in adj:
@@ -95,9 +73,7 @@ class Environment:
             change_reward = reward-self.last_reward
             if change_reward<=0:
                 done=True
-
             self.last_reward = reward
-
             return (change_reward,done)
 
     def get_approx(self):
@@ -130,7 +106,7 @@ class Environment:
 
         if self.name =="MVC":
             
-            x = list(range(self.graph_init.g.number_of_nodes()))
+            x = list(range(self.nodes_count))
             
             xv = pulp.LpVariable.dicts('is_opti', x,
                                        lowBound=0,
@@ -154,7 +130,7 @@ class Environment:
 
         elif self.name=="MAXCUT":
 
-            x = list(range(self.graph_init.g.number_of_nodes()))
+            x = list(range(self.nodes_count))
             e = list(self.graph_init.edges())
             xv = pulp.LpVariable.dicts('is_opti', x,
                                        lowBound=0,

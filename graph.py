@@ -32,8 +32,7 @@ class Graph:
         self.adj_dense = nx.to_numpy_matrix(self.g,dtype=np.int32)
 
 
-    def nodes(self):
-
+    def nodes_count(self):
         return nx.number_of_nodes(self.g)
 
     def edges(self):

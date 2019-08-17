@@ -47,9 +47,6 @@ class DQAgent:
         self.epsilon_=1
         self.epsilon_min=0.05
         self.discount_factor =0.999990
-        #self.eps_end=0.02
-        #self.eps_start=1
-        #self.eps_step=20000
         
         self.memory = []
         self.memory_n=[]
@@ -57,8 +54,7 @@ class DQAgent:
 
         self.env=envir.Environment(env_name)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.zpad=torch.zeros(1, self.node_max, 1, dtype=torch.float)
-
+        
         if self.model_name == 'S2V_QN_1':
 
             args_init = load_model_config()[self.model_name]
@@ -84,10 +80,7 @@ class DQAgent:
             args_init = load_model_config()[self.model_name]
             self.model = models.W2V_QN(G=self.graphs[self.games], **args_init)
 
-
         self.T = 5
-        
-
         if torch.cuda.device_count() >= 1:
             print("Using", torch.cuda.device_count(), "GPUs!")
             self.model.to(self.device)
@@ -116,7 +109,7 @@ class DQAgent:
             self.memory_n=tmp_mem
             #random.sample(self.memory_n,300000)  random sample is not great
 
-        self.nodes = self.graphs[self.games].nodes()
+        self.nodes = self.graphs[self.games].nodes_count()
         self.adj = self.graphs[self.games].adj()
         self.last_action = 0
         self.last_observation = torch.zeros(1, self.nodes, 1, dtype=torch.float)
@@ -128,6 +121,7 @@ class DQAgent:
         self.done = 0
         self.iter = 0
         self.memory.clear()
+        self.permu=np.zeros(2,self.nodes)
         # you can use the auxiliary temp memory of the game and reset it here.
 
     def act(self, observation): # eps-greedy
@@ -135,32 +129,70 @@ class DQAgent:
             if self.epsilon_ > np.random.rand():
                 action = np.random.choice(np.where(observation.numpy()[0,:,0] == 0)[0])
             else:
-                adj_max = torch.from_numpy(self.adj).type(torch.FloatTensor).view(1,self.node_max,self.node_max)
-                q_a = self.model.forward(observation, adj_max).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
-                q_a=q_a.numpy()
+                adj_max = self.adj
+                I=adj_sub()
+                a1=np.matmul(I,adj_max)
+                a2=np.matmul(a1,I)
+                adj_act=torch.from_numpy(self.a2).type(torch.FloatTensor).view(1,self.node_max,self.node_max)
+                q_a = self.model.forward(observation, adj_act).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
+                q_a=q_a.numpy() #Avail_pts RATHER THAN observation for forward processing!!!
+
                 action = np.where((q_a[0, :, 0] == np.max(q_a[0, :, 0][observation.numpy()[0, :, 0] == 0])))[0][0]
-            obs_tmp = self.env.observe().clone() # Using LOCAL variables to prevent unexpected changes of variables
+
+            # get the point cover ratio and edge cover ratio
+            
+            # Using LOCAL variables to prevent unexpected changes of variables
             (reward,done) = self.env.act(action)
             self.remember(obs_tmp, action, reward)
             self.iter += 1
         return (reward, done)
 
+    """
     def adj_sub(self):
-        actpt=self.env.active_pts_sol()
+        actpt=self.active_pts_sol()
         I=np.zeros(self.nodes, self.nodes)
         for i in range(self.nodes):
             if actpt[i]==1:
                 I[i,i]=1
         return I
-        
-    def permutation(self, xv):
+    """
+    def permutation_array(self, permu=None):
+        if not permu:
+            permu=self.permu
+        I=np.zeros(self.nodes, self.nodes)#subgraph matrix (to be calculated)
+        P=np.zeros(self.nodes, self.node_max)
+        for i in range(self.nodes):
+            if permu[0][i]==1:
+                I[i][i]=1
+        for i in range(len(self.permu[2])):
+            if permu[0][i]==1:
+                P[i,permu[1][i]]=1
+        return (I,P)
+
+    def permutation(self, observation=None):#find the active points and embedding into node_max dims by permutations
+        if not observation:
+            observation=self.observation
+        actpts=self.permu[0]
+        for node in self.nodes:
+            if node in observation:
+                continue
+            else:
+                if self.env.graph_init.neighbors(node) in self.observation:
+                    continue
+            actpts[node]=1
         permu1=list(range(self.node_max))
-        permu2=random.sample(permu1, len(xv))
-        P=np.zeros(len(xv), self.node_max)
-        for i in range(len(xv)):
-            P[i,permu2[i]]=1
-        return P
+        permu2=random.sample(permu1, np.sum(actpts))
+        j=0
+        I=np.zeros(self.nodes, self.nodes)#subgraph matrix (to be calculated)
+        P=np.zeros(self.nodes, self.node_max)
+        for i in range(self.nodes):
+            if actpts[i]==1:
+                self.permu[1][i]=permu2[j]
+                j+=1
+        return self.permutation_array()
         #p:permutation matrix
+
+
 
     def renew(self,recent):
             # Warning: you should play the game several times (such as 1000) to start the optimizing process.
@@ -187,7 +219,7 @@ class DQAgent:
         self.optimizer.zero_grad()
         with torch.no_grad():
             m1=self.model(obs_tens.to(self.device), adj_tens.to(self.device)).cpu()
-            target = reward_tens + self.gamma*(1-done_tens)*(torch.max(m1 + obs_tens * (-1e5), dim=1)[0].view(self.minibatch_length))
+            target = reward_tens + self.gamma*(1-done_tens)*(torch.max(m1 + obs_tens * (-1e5), dim=1)[0].view(self.minibatch_length))#max should be selected among the active pts.
             target_p=torch.zeros_like(target)
         p_tensor=self.model(l_obs_tens.to(self.device), adj_tens.to(self.device)).cpu()
         for i in range(self.minibatch_length):
