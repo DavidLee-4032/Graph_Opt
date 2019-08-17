@@ -20,8 +20,8 @@ class Runner:
 
     def act(self):
         (observation, aux) = self.agent.env.observe()#.clone()
-        permu=self.agent.permutation(observation)
-        (reward, done) = self.agent.act(permu, aux)#.copy()
+        self.agent.permutation(observation)
+        (reward, done) = self.agent.act(aux)#.copy()
         return (reward, done, aux)
 
 

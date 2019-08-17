@@ -110,7 +110,6 @@ class DQAgent:
             #random.sample(self.memory_n,300000)  random sample is not great
 
         self.nodes = self.graphs[self.games].nodes_count()
-        self.adj = self.graphs[self.games].adj()
         self.last_action = 0
         self.last_observation = torch.zeros(1, self.nodes, 1, dtype=torch.float)
         self.last_reward = -0.01
@@ -124,15 +123,16 @@ class DQAgent:
         self.permu=np.zeros(2,self.nodes)
         # you can use the auxiliary temp memory of the game and reset it here.
 
-    def act(self, observation): # eps-greedy
+    def act(self, aux): # eps-greedy
         with torch.no_grad():
             if self.epsilon_ > np.random.rand():
-                action = np.random.choice(np.where(observation.numpy()[0,:,0] == 0)[0])
+                action = np.random.choice(np.where(self.permu[0,:] == 1)[0])
             else:
-                adj_max = self.adj
-                I=adj_sub()
-                a1=np.matmul(I,adj_max)
-                a2=np.matmul(a1,I)
+                (I,P)=self.permutation_array()
+                mul_mat = np.matmul(P,I)
+                adj1 = np.matmul(mul_mat, self.graphs[self.games].adj)
+                adj2 = np.matmul(adj1, mul_mat.transpose())
+                #node_feat = torch.tensor(self.permu[0]).repeat(2,1)
                 adj_act=torch.from_numpy(self.a2).type(torch.FloatTensor).view(1,self.node_max,self.node_max)
                 q_a = self.model.forward(observation, adj_act).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
                 q_a=q_a.numpy() #Avail_pts RATHER THAN observation for forward processing!!!
@@ -160,11 +160,12 @@ class DQAgent:
         if not permu:
             permu=self.permu
         I=np.zeros(self.nodes, self.nodes)#subgraph matrix (to be calculated)
-        P=np.zeros(self.nodes, self.node_max)
+        P=np.zeros(self.nodes, self.node_max)#permutation matrix
+        #When calculating, use P.I.adj.I.(P.transpose())
         for i in range(self.nodes):
             if permu[0][i]==1:
                 I[i][i]=1
-        for i in range(len(self.permu[2])):
+        for i in range(len(self.permu[1])):
             if permu[0][i]==1:
                 P[i,permu[1][i]]=1
         return (I,P)
@@ -183,14 +184,11 @@ class DQAgent:
         permu1=list(range(self.node_max))
         permu2=random.sample(permu1, np.sum(actpts))
         j=0
-        I=np.zeros(self.nodes, self.nodes)#subgraph matrix (to be calculated)
-        P=np.zeros(self.nodes, self.node_max)
         for i in range(self.nodes):
             if actpts[i]==1:
                 self.permu[1][i]=permu2[j]
                 j+=1
-        return self.permutation_array()
-        #p:permutation matrix
+        #return self.permutation_array()
 
 
 
