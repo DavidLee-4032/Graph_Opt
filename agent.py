@@ -122,31 +122,6 @@ class DQAgent:
         self.memory.clear()
         self.permu=np.zeros(2,self.nodes)
         # you can use the auxiliary temp memory of the game and reset it here.
-
-    def act(self, aux): # eps-greedy
-        with torch.no_grad():
-            if self.epsilon_ > np.random.rand():
-                action = np.random.choice(np.where(self.permu[0,:] == 1)[0])
-            else:
-                (I,P)=self.permutation_array()
-                mul_mat = np.matmul(P,I)
-                adj1 = np.matmul(mul_mat, self.graphs[self.games].adj)
-                adj2 = np.matmul(adj1, mul_mat.transpose())
-                #node_feat = torch.tensor(self.permu[0]).repeat(2,1)
-                adj_act=torch.from_numpy(self.a2).type(torch.FloatTensor).view(1,self.node_max,self.node_max)
-                q_a = self.model.forward(observation, adj_act).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
-                q_a=q_a.numpy() #Avail_pts RATHER THAN observation for forward processing!!!
-
-                action = np.where((q_a[0, :, 0] == np.max(q_a[0, :, 0][observation.numpy()[0, :, 0] == 0])))[0][0]
-
-            # get the point cover ratio and edge cover ratio
-            
-            # Using LOCAL variables to prevent unexpected changes of variables
-            (reward,done) = self.env.act(action)
-            self.remember(obs_tmp, action, reward)
-            self.iter += 1
-        return (reward, done)
-
     """
     def adj_sub(self):
         actpt=self.active_pts_sol()
@@ -188,9 +163,31 @@ class DQAgent:
             if actpts[i]==1:
                 self.permu[1][i]=permu2[j]
                 j+=1
-        #return self.permutation_array()
 
-
+    def act(self, aux): # eps-greedy
+        with torch.no_grad():
+            if self.epsilon_ > np.random.rand():
+                action = np.random.choice(np.where(self.permu[0,:] == 1)[0])
+            else:
+                (I,P)=self.permutation_array()
+                mul_mat = np.matmul(P,I)
+                adj1 = np.matmul(mul_mat, self.graphs[self.games].adj)
+                adj2 = np.matmul(adj1, mul_mat.transpose())
+                feat1 = self.permu[0].reshape(1,self.nodes)
+                feat2 = np.matmul(feat1, P)
+                feat3 = np.repeat(feat2.reshape(1,self.node_max,1), 2, axis=2)
+                node_feat = torch.tensor(feat3)
+                q_a = self.model.forward(node_feat, adj2, aux).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
+                q_a=q_a.numpy() #Avail_pts RATHER THAN observation for forward processing!!!
+                q_a0=np.matmul(q_a, P.transpose())
+                action = np.argmax(q_a0)
+            # get the point cover ratio and edge cover ratio
+            
+            # Using LOCAL variables to prevent unexpected changes of variables
+            (reward,done) = self.env.act(action)
+            self.remember(self.permu.copy(), action, reward)
+            self.iter += 1
+        return (reward, done)
 
     def renew(self,recent):
             # Warning: you should play the game several times (such as 1000) to start the optimizing process.
