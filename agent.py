@@ -55,6 +55,7 @@ class DQAgent:
         self.env=envir.Environment(env_name)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
+
         if self.model_name == 'S2V_QN_1':
 
             args_init = load_model_config()[self.model_name]
@@ -121,6 +122,7 @@ class DQAgent:
         self.iter = 0
         self.memory.clear()
         self.permu=np.zeros(2,self.nodes)
+        self.zpad=np.zeros(2,self.nodes)
         # you can use the auxiliary temp memory of the game and reset it here.
     """
     def adj_sub(self):
@@ -170,9 +172,9 @@ class DQAgent:
                 action = np.random.choice(np.where(self.permu[0,:] == 1)[0])
             else:
                 (I,P)=self.permutation_array()
-                mul_mat = np.matmul(P,I)
-                adj1 = np.matmul(mul_mat, self.graphs[self.games].adj)
-                adj2 = np.matmul(adj1, mul_mat.transpose())
+                mul_mat = np.matmul(I,P)
+                adj1 = np.matmul(mul_mat.transpose(), self.graphs[self.games].adj)
+                adj2 = np.matmul(adj1, mul_mat)
                 feat1 = self.permu[0].reshape(1,self.nodes)
                 feat2 = np.matmul(feat1, P)
                 feat3 = np.repeat(feat2.reshape(1,self.node_max,1), 2, axis=2)
@@ -185,7 +187,7 @@ class DQAgent:
             
             # Using LOCAL variables to prevent unexpected changes of variables
             (reward,done) = self.env.act(action)
-            self.remember(self.permu.copy(), action, reward)
+            self.remember(self.permu.copy(), action, reward, aux)
             self.iter += 1
         return (reward, done)
 
@@ -197,26 +199,42 @@ class DQAgent:
             exp_sam=exp_sam+exp_sam_2
         else:
             exp_sam = random.sample(self.memory_n, self.minibatch_length)
-        l_obs_tens=torch.empty(self.minibatch_length, self.node_max,2)
+        l_feat_tens=torch.empty(self.minibatch_length, self.node_max,2)
         action_tens=torch.empty(self.minibatch_length)
         reward_tens=torch.empty(self.minibatch_length)
-        obs_tens=torch.empty(self.minibatch_length, self.node_max,2)
+        feat_tens=torch.empty(self.minibatch_length, self.node_max,2)
         done_tens=torch.empty(self.minibatch_length)
         adj_tens=torch.empty(self.minibatch_length, self.node_max, self.node_max)
         target=torch.empty(self.minibatch_length)
         for i in range(self.minibatch_length):
-            l_obs_tens[i]=exp_sam[i][0]#torch.zeros(1, 2).scatter_(1, exp_sam[i][0], 1)
+            (I1,P1)=self.permutation_array(exp_sam[i][0])
+            mul_mat1 = np.matmul(I1,P1)
+            adj1 = np.matmul(mul_mat1.transpose(), self.graphs[self.games].adj)
+            adj1_ = np.matmul(adj1, mul_mat1)
+            feat1 = self.permu[0].reshape(1,self.nodes)
+            feat1_ = np.matmul(feat1, P1)
+            feat1__ = np.repeat(feat1_.reshape(self.node_max,1), 2, axis=1)
+            (I2,P2)=self.permutation_array(exp_sam[i][3])
+            mul_mat2 = np.matmul(I2,P2)
+            adj2 = np.matmul(mul_mat2.transpose(), self.graphs[self.games].adj)
+            adj2_ = np.matmul(adj2, mul_mat1)
+            feat2 = self.permu[0].reshape(1,self.nodes)
+            feat2_ = np.matmul(feat2, P2)
+            feat2__ = np.repeat(feat2_.reshape(self.node_max,1), 2, axis=1)
+
+            l_feat_tens[i]=torch.tensor(feat1__)#torch.zeros(1, 2).scatter_(1, exp_sam[i][0], 1)
             action_tens[i]=exp_sam[i][1].item()
             reward_tens[i]=exp_sam[i][2]
-            obs_tens[i]=exp_sam[i][3]#torch.zeros(1, 2).scatter_(1, exp_sam[i][3], 1)
+            feat_tens[i]=torch.tensor(feat2__)#torch.zeros(1, 2).scatter_(1, exp_sam[i][3], 1)
             done_tens[i]=int(exp_sam[i][4])
             adj_tens[i] = torch.from_numpy(self.graphs[exp_sam[i][5]].adj()).type(torch.FloatTensor)
+
         self.optimizer.zero_grad()
         with torch.no_grad():
-            m1=self.model(obs_tens.to(self.device), adj_tens.to(self.device)).cpu()
-            target = reward_tens + self.gamma*(1-done_tens)*(torch.max(m1 + obs_tens * (-1e5), dim=1)[0].view(self.minibatch_length))#max should be selected among the active pts.
+            m1=self.model(feat_tens.to(self.device), adj_tens.to(self.device), ).cpu()
+            target = reward_tens + self.gamma*(1-done_tens)*(torch.max(m1 + feat_tens * (-1e5), dim=1)[0].view(self.minibatch_length))#max should be selected among the active pts.
             target_p=torch.zeros_like(target)
-        p_tensor=self.model(l_obs_tens.to(self.device), adj_tens.to(self.device)).cpu()
+        p_tensor=self.model(l_feat_tens.to(self.device), adj_tens.to(self.device)).cpu()
         for i in range(self.minibatch_length):
             target_p[i] = p_tensor[i,exp_sam[i][1],:]
         loss=self.criterion(target_p, target)
@@ -227,8 +245,8 @@ class DQAgent:
         if self.epsilon_ > self.epsilon_min:
            self.epsilon_ *= self.discount_factor
 
-    def remember(self, observation, action, reward): #You can change it to TEMPORAL data!!
-        self.memory.append((observation, action, reward))
+    def remember(self, permu, action, reward): #You can change it to TEMPORAL data!!
+        self.memory.append((permu, action, reward, aux))
 
     def remember_n(self):#save n-step experience
         cum_reward=0
@@ -237,9 +255,9 @@ class DQAgent:
         for i in range(self.iter):
             done = (i+self.n_step > self.iter - 1)
             if done:
-                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.zpad, done, self.games)
+                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.zpad, done, self.games, self.memory[i][4], self.memory[-1][4])
             else:
-                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.memory[i+self.n_step][0], done, self.games)
+                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.memory[i+self.n_step][0], done, self.games, self.memory[i][4], self.memory[i+self.n_step][4])
             self.memory_n.append(step_init)
             if not done: cum_reward += self.memory[i+self.n_step][2]
             cum_reward -= self.memory[i][2]

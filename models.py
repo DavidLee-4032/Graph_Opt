@@ -41,7 +41,7 @@ class S2V_QN_1(torch.nn.Module):
             self.q = torch.nn.Linear(2 * embed_dim, 1)
         torch.nn.init.normal_(self.q.weight, mean=0, std=0.01)
 
-    def forward(self, xv, adj):
+    def forward(self, xv, adj, aux):
         # When the nodes of graphs is changing, it won't work anymore.
         minibatch_size = xv.shape[0]
         nbr_node = xv.shape[1]

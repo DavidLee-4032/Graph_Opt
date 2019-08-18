@@ -22,7 +22,7 @@ class Runner:
         (observation, aux) = self.agent.env.observe()#.clone()
         self.agent.permutation(observation)
         (reward, done) = self.agent.act(aux)#.copy()
-        return (reward, done, aux)
+        return (reward, done)
 
 
 
