@@ -30,7 +30,7 @@ class Environment:
                  of the environment, if applicable.
         """
         #This is a non-random instance
-        aux=[1.0*self.nodes_selected/self.nodes_count, 1.0*self.edge_cover_count/self.edges_count, 1.0]
+        aux=torch.tensor([1.0*self.nodes_selected/self.nodes_count, 1.0*self.edge_cover_count/self.edges_count, 1.0])
         return (self.observation,aux)
 
     def fully_covered(self):

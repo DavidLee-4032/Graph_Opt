@@ -179,7 +179,7 @@ class DQAgent:
                 feat2 = np.matmul(feat1, P)
                 feat3 = np.repeat(feat2.reshape(1,self.node_max,1), 2, axis=2)
                 node_feat = torch.tensor(feat3)
-                q_a = self.model.forward(node_feat, adj2, aux).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
+                q_a = self.model.forward(node_feat.to(self.device), adj2.to(self.device), aux.to(self.device)).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
                 q_a=q_a.numpy() #Avail_pts RATHER THAN observation for forward processing!!!
                 q_a0=np.matmul(q_a, P.transpose())
                 action = np.argmax(q_a0)
@@ -205,7 +205,7 @@ class DQAgent:
         feat_tens=torch.empty(self.minibatch_length, self.node_max,2)
         done_tens=torch.empty(self.minibatch_length)
         adj_tens=torch.empty(self.minibatch_length, self.node_max, self.node_max)
-        target=torch.empty(self.minibatch_length)
+        target=torch.zeros(self.minibatch_length)
         for i in range(self.minibatch_length):
             (I1,P1)=self.permutation_array(exp_sam[i][0])
             mul_mat1 = np.matmul(I1,P1)
@@ -230,11 +230,17 @@ class DQAgent:
             adj_tens[i] = torch.from_numpy(self.graphs[exp_sam[i][5]].adj()).type(torch.FloatTensor)
 
         self.optimizer.zero_grad()
-        with torch.no_grad():
-            m1=self.model(feat_tens.to(self.device), adj_tens.to(self.device), ).cpu()
-            target = reward_tens + self.gamma*(1-done_tens)*(torch.max(m1 + feat_tens * (-1e5), dim=1)[0].view(self.minibatch_length))#max should be selected among the active pts.
-            target_p=torch.zeros_like(target)
-        p_tensor=self.model(l_feat_tens.to(self.device), adj_tens.to(self.device)).cpu()
+        #with torch.no_grad():
+        m1=self.model.forward(feat_tens.to(self.device), adj_tens.to(self.device), exp_sam[i][7].to(self.device)).cpu()#feat
+        m2=torch.matmul(m1, P2.transpose)
+        for i in range(self.minibatch_length):
+            if done_tens[i]==0:
+                m0=torch.eq(m1[i],0)
+                m00=torch.masked_select(m1[i], m0)
+                target[i] = self.gamma*(torch.max(m0))#
+        target += reward_tens#max should be selected among the active pts.
+        target_p=torch.zeros_like(target)
+        p_tensor=self.model(l_feat_tens.to(self.device), adj_tens.to(self.device), exp_sam[i][6].to(self.device)).cpu()#l_feat
         for i in range(self.minibatch_length):
             target_p[i] = p_tensor[i,exp_sam[i][1],:]
         loss=self.criterion(target_p, target)
@@ -245,7 +251,7 @@ class DQAgent:
         if self.epsilon_ > self.epsilon_min:
            self.epsilon_ *= self.discount_factor
 
-    def remember(self, permu, action, reward): #You can change it to TEMPORAL data!!
+    def remember(self, permu, action, reward, aux): #You can change it to TEMPORAL data!!
         self.memory.append((permu, action, reward, aux))
 
     def remember_n(self):#save n-step experience
