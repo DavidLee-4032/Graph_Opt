@@ -5,7 +5,6 @@ import random
 import networkx as nx
 import numpy as np
 
-
 class S2V_QN_1(torch.nn.Module):
     def __init__(self,reg_hidden, embed_dim, len_pre_pooling, len_post_pooling, T):
 
@@ -15,63 +14,41 @@ class S2V_QN_1(torch.nn.Module):
         self.reg_hidden=reg_hidden
         self.len_pre_pooling = len_pre_pooling
         self.len_post_pooling = len_post_pooling
-        self.mu_1 = torch.nn.Parameter(torch.Tensor(1, embed_dim))
-        torch.nn.init.normal_(self.mu_1, mean=0, std=0.01)
-        self.mu_2 = torch.nn.Linear(embed_dim, embed_dim,True)
-        torch.nn.init.normal_(self.mu_2.weight, mean=0, std=0.01)
-        self.list_pre_pooling = []
-        for i in range(self.len_pre_pooling):
-            pre_lin = torch.nn.Linear(embed_dim,embed_dim,bias=True)
-            torch.nn.init.normal_(pre_lin.weight, mean=0, std=0.01)
-            self.list_pre_pooling.append(pre_lin)
-        self.list_post_pooling = []
-        for i in range(self.len_post_pooling):
-            post_lin =torch.nn.Linear(embed_dim,embed_dim,bias=True)
-            torch.nn.init.normal_(post_lin.weight, mean=0, std=0.01)
-            self.list_post_pooling.append(post_lin)
-        self.q_1 = torch.nn.Linear(embed_dim, embed_dim,bias=True)
-        torch.nn.init.normal_(self.q_1.weight, mean=0, std=0.01)
-        self.q_2 = torch.nn.Linear(embed_dim, embed_dim,bias=True)
-        torch.nn.init.normal_(self.q_2.weight, mean=0, std=0.01)
+        self.w_n2l = torch.nn.Parameter(torch.Tensor(2, embed_dim))
+        torch.nn.init.normal_(self.w_n2l, mean=0, std=0.01)
+        self.p_node_conv = torch.nn.Parameter(torch.Tensor(embed_dim, embed_dim))
+        torch.nn.init.normal_(self.p_node_conv.weight, mean=0, std=0.01)
+
         if self.reg_hidden > 0:
-            self.q_reg = torch.nn.Linear(2 * embed_dim, self.reg_hidden)
-            torch.nn.init.normal_(self.q_reg.weight, mean=0, std=0.01)
-            self.q = torch.nn.Linear(self.reg_hidden, 1)
+            self.h1_weight = torch.nn.Parameter(torch.Tensor(2 * embed_dim, self.reg_hidden))
+            torch.nn.init.normal_(self.h1_weight.weight, mean=0, std=0.01)
+            self.h2_weight = torch.nn.Parameter(torch.Tensor(self.reg_hidden + 3, 1))
         else:
-            self.q = torch.nn.Linear(2 * embed_dim, 1)
+            self.h2_weight = torch.nn.Parameter(2 * embed_dim, 1)
         torch.nn.init.normal_(self.q.weight, mean=0, std=0.01)
 
     def forward(self, xv, adj, aux):
         # When the nodes of graphs is changing, it won't work anymore.
         minibatch_size = xv.shape[0]
         nbr_node = xv.shape[1]
-
+        input_message = torch.matmul(xv, self.w_n2l)
+        cur_message = F.relu(input_message)
         for t in range(self.T):
-            if t == 0:
-                mu = torch.matmul(xv, self.mu_1).clamp(0)
-            else:
-                mu_1 = torch.matmul(xv, self.mu_1).clamp(0)
-                # before pooling:
-                for i in range(self.len_pre_pooling):
-                    mu = self.list_pre_pooling[i](mu).clamp(0)
-                mu_pool = torch.matmul(adj, mu)
-
-                # after pooling
-                for i in range(self.len_post_pooling):
-                    mu_pool = self.list_post_pooling[i](mu_pool).clamp(0)
-                mu_2 = self.mu_2(mu_pool)
-                mu = torch.add(mu_1, mu_2).clamp(0)
-        xv1=torch.ones_like(xv)
-        q_1 = self.q_1(torch.matmul(xv1.transpose(1,2),mu)).expand(minibatch_size,nbr_node,self.embed_dim)
-        q_2 = self.q_2(mu)
-        q_ = torch.cat((q_1, q_2), dim=-1)
+            n2npool = torch.matmul(adj, cur_message)
+            node_linear = torch.matmul(n2npool, p_node_conv)
+            merged_linear = torch.add(node_linear, input_message)
+            cur_message = F.relu(merged_linear)
+        
+        xv1=torch.clone(xv[:,:,0])
+        y_potential = torch.matmul(xv1.transpose(1,2), cur_message).expand(minibatch_size,nbr_node,self.embed_dim)
+        rep_y = torch.matmul(torch.diag_embed(xv1), cur_message) #Batched matmul
+        embed_s_a = torch.cat((rep_y, y_potential), dim=-1)
         if self.reg_hidden > 0:
-            q_reg = self.q_reg(q_).clamp(0)
-            q = self.q(q_reg)
-        else:
-            q_=q_.clamp(0)
-            q = self.q(q_)
-        return q
+            hidden = torch.matmul(embed_s_a, self.h1_weight)
+            last_output=F.relu(hidden)
+        
+        q_pred=tf.matmul(torch.cat(last_output, aux, dim=-1), h2_weight)
+        return q_pred
 
 class S2V_QN_2(torch.nn.Module):
     def __init__(self,reg_hidden, embed_dim, len_pre_pooling, len_post_pooling, T):
@@ -102,13 +79,13 @@ class S2V_QN_2(torch.nn.Module):
         torch.nn.init.normal_(self.q_1, mean=0, std=0.01)
         self.q_2 = torch.nn.Parameter(torch.Tensor(embed_dim, embed_dim))
         torch.nn.init.normal_(self.q_2, mean=0, std=0.01)
-        self.q = torch.nn.Parameter(torch.Tensor(2 * embed_dim, 1))
+        self.h2_weight = torch.nn.Parameter(torch.Tensor(2 * embed_dim, 1))
         if self.reg_hidden > 0:
             self.q_reg = torch.nn.Parameter(torch.Tensor(2 * embed_dim, self.reg_hidden))
             torch.nn.init.normal_(self.q_reg, mean=0, std=0.01)
-            self.q = torch.nn.Parameter(torch.tensor(self.reg_hidden, 1))
+            self.h2_weight = torch.nn.Parameter(torch.tensor(self.reg_hidden, 1))
         else:
-            self.q = torch.nn.Parameter(torch.Tensor(2 * embed_dim, 1))
+            self.h2_weight = torch.nn.Parameter(torch.Tensor(2 * embed_dim, 1))
         torch.nn.init.normal_(self.q, mean=0, std=0.01)
 
     def forward(self, xv, adj):
@@ -141,6 +118,7 @@ class S2V_QN_2(torch.nn.Module):
                 mu = torch.add(mu_1, mu_2).clamp(0)
 
         #q_1 = self.q_1(torch.matmul(xv.transpose(1,2),mu)).expand(minibatch_size,nbr_node,self.embed_dim)
+        #q_1 = self.q_1(torch.sum( mu,dim=1).reshape(minibatch_size,1,self.embed_dim).expand(minibatch_size,nbr_node,self.embed_dim))
         q_1 = torch.matmul(torch.matmul(adj,mu),self.q_1)
         q_2 = torch.matmul(mu,self.q_2)
         q_ = torch.cat((q_1, q_2), dim=-1)
