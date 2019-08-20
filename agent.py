@@ -205,21 +205,22 @@ class DQAgent:
         reward_tens=torch.empty(self.minibatch_length)
         feat_tens=torch.empty(self.minibatch_length, self.node_max,2)
         done_tens=torch.empty(self.minibatch_length, dtype=torch.int)
-        adj_tens=torch.empty(self.minibatch_length, self.node_max, self.node_max)
+        l_adj_tens=torch.empty(self.minibatch_length, self.node_max, self.node_max)
+        adj_tens = torch.empty(self.minibatch_length, self.node_max, self.node_max)
         l_aux_tens=torch.empty(self.minibatch_length, 3)
         aux_tens=torch.empty(self.minibatch_length, 3)
         target=torch.zeros(self.minibatch_length)
         for i in range(self.minibatch_length):
             (I1,P1)=self.permutation_array(exp_sam[i][0])
             mul_mat1 = np.matmul(I1,P1)
-            adj1 = np.matmul(mul_mat1.transpose(), self.graphs[self.games].adj)
+            adj1 = np.matmul(mul_mat1.transpose(), self.graphs[exp_sam[i][5]].adj())
             adj1_ = np.matmul(adj1, mul_mat1)
             feat1 = self.permu[0].reshape(1,self.nodes)
             feat1_ = np.matmul(feat1, P1)
             feat1__ = np.repeat(feat1_.reshape(self.node_max,1), 2, axis=1)
             (I2,P2)=self.permutation_array(exp_sam[i][3])
             mul_mat2 = np.matmul(I2,P2)
-            adj2 = np.matmul(mul_mat2.transpose(), self.graphs[self.games].adj)
+            adj2 = np.matmul(mul_mat2.transpose(), self.graphs[exp_sam[i][5]].adj())
             adj2_ = np.matmul(adj2, mul_mat1)
             feat2 = self.permu[0].reshape(1,self.nodes)
             feat2_ = np.matmul(feat2, P2)
@@ -230,7 +231,8 @@ class DQAgent:
             reward_tens[i]=exp_sam[i][2]
             feat_tens[i]=torch.tensor(feat2__)#torch.zeros(1, 2).scatter_(1, exp_sam[i][3], 1)
             done_tens[i]=int(exp_sam[i][4])
-            adj_tens[i] = torch.from_numpy(self.graphs[exp_sam[i][5]].adj()).type(torch.FloatTensor)
+            l_adj_tens[i] = torch.from_numpy(adj1_).type(torch.FloatTensor)
+            adj_tens[i] = torch.from_numpy(adj2_).type(torch.FloatTensor)
             l_aux_tens[i] = torch.tensor(exp_sam[i][6])
             aux_tens[i] = torch.tensor(exp_sam[i][7])
 
@@ -245,7 +247,7 @@ class DQAgent:
         target *= self.gamma
         target += reward_tens#max should be selected among the active pts.
         target_p=torch.zeros_like(target)
-        p_tensor=self.model(l_feat_tens.to(self.device), adj_tens.to(self.device), l_aux_tens.to(self.device)).cpu()#l_feat
+        p_tensor=self.model(l_feat_tens.to(self.device), l_adj_tens.to(self.device), l_aux_tens.to(self.device)).cpu()#l_feat
         for i in range(self.minibatch_length):
             target_p[i] = p_tensor[i,exp_sam[i][1],:]
         loss=self.criterion(target_p, target)
