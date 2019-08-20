@@ -112,54 +112,55 @@ class DQAgent:
 
         self.nodes = self.graphs[self.games].nodes_count()
         self.last_action = 0
-        self.last_observation = torch.zeros(1, self.nodes, 1, dtype=torch.float)
+        #self.last_observation = torch.zeros(self.nodes, dtype=torch.int)
         self.last_reward = -0.01
         self.last_done = 0
         self.action = 0
-        self.observation = torch.zeros(1, self.nodes, 1, dtype=torch.float)
+        self.observation = torch.zeros(self.nodes, dtype=torch.int)
         self.reward = -0.01
         self.done = 0
         self.iter = 0
         self.memory.clear()
-        self.permu=np.zeros(2,self.nodes)
-        self.zpad=np.zeros(2,self.nodes)
+        
+        self.zpad=np.zeros([2,self.nodes])
         # you can use the auxiliary temp memory of the game and reset it here.
-    """
-    def adj_sub(self):
-        actpt=self.active_pts_sol()
-        I=np.zeros(self.nodes, self.nodes)
-        for i in range(self.nodes):
-            if actpt[i]==1:
-                I[i,i]=1
-        return I
-    """
+
     def permutation_array(self, permu=None):
-        if not permu:
+        if permu is None:
             permu=self.permu
-        I=np.zeros(self.nodes, self.nodes)#subgraph matrix (to be calculated)
-        P=np.zeros(self.nodes, self.node_max)#permutation matrix
+            nodes_num=self.nodes
+        else:
+            nodes_num=permu[0].size
+        
+        I=np.zeros([nodes_num, nodes_num])#subgraph matrix (to be calculated)
+        P=np.zeros([nodes_num, self.node_max])#permutation matrix
         #When calculating, use P.I.adj.I.(P.transpose())
-        for i in range(self.nodes):
+        for i in range(nodes_num):
             if permu[0][i]==1:
                 I[i][i]=1
-        for i in range(len(self.permu[1])):
+        for i in range(len(permu[1])):
             if permu[0][i]==1:
-                P[i,permu[1][i]]=1
+                P[i,int(permu[1][i])]=1
         return (I,P)
 
     def permutation(self, observation=None):#find the active points and embedding into node_max dims by permutations
-        if not observation:
+        self.permu=np.zeros([2,self.nodes])#permu[0] is available points and permu[1] is the place after permuted
+        if observation is None:
             observation=self.observation
         actpts=self.permu[0]
-        for node in self.nodes:
-            if node in observation:
+        for node in range(self.nodes):
+            if observation[node]==1:
                 continue
             else:
-                if self.env.graph_init.neighbors(node) in self.observation:
+                skip=True
+                for i in self.env.graph_init.neighbors(node):
+                    if observation[i]==0:
+                        skip=False
+                        break
+                if skip:
                     continue
             actpts[node]=1
-        permu1=list(range(self.node_max))
-        permu2=random.sample(permu1, np.sum(actpts))
+        permu2=random.sample(list(range(self.node_max)), int(np.sum(actpts)))
         j=0
         for i in range(self.nodes):
             if actpts[i]==1:
@@ -173,16 +174,17 @@ class DQAgent:
             else:
                 (I,P)=self.permutation_array()
                 mul_mat = np.matmul(I,P)
-                adj1 = np.matmul(mul_mat.transpose(), self.graphs[self.games].adj)
+                adj1 = np.matmul(mul_mat.transpose(), self.graphs[self.games].adj())
                 adj2 = np.matmul(adj1, mul_mat)
                 feat1 = self.permu[0].reshape(1,self.nodes)
                 feat2 = np.matmul(feat1, P)
                 feat3 = np.repeat(feat2.reshape(1,self.node_max,1), 2, axis=2)
-                node_feat = torch.tensor(feat3)
-                aux_tensor=torch.tensor(aux).view(1,3)
-                q_a = self.model.forward(node_feat.to(self.device), adj2.to(self.device), aux_tensor.to(self.device)).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
-                q_a=q_a.numpy() #Avail_pts RATHER THAN observation for forward processing!!!
-                q_a0=np.matmul(q_a, P.transpose())
+                node_feat = torch.tensor(feat3, dtype=torch.float)
+                aux_tensor=torch.tensor(aux, dtype=torch.float).unsqueeze(dim=0)
+                adj2_tensor=torch.tensor(adj2,dtype=torch.float).unsqueeze(dim=0)
+                q_a = self.model.forward(node_feat.to(self.device), adj2_tensor.to(self.device), aux_tensor.to(self.device)).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
+                q_a_np=q_a.squeeze_().numpy() #Avail_pts RATHER THAN observation for forward processing!!!
+                q_a0=np.matmul(q_a_np, P.transpose())
                 action = np.argmax(q_a0)
             # get the point cover ratio and edge cover ratio
             
@@ -210,19 +212,20 @@ class DQAgent:
         l_aux_tens=torch.empty(self.minibatch_length, 3)
         aux_tens=torch.empty(self.minibatch_length, 3)
         target=torch.zeros(self.minibatch_length)
+        permus=[None]*self.minibatch_length
         for i in range(self.minibatch_length):
             (I1,P1)=self.permutation_array(exp_sam[i][0])
             mul_mat1 = np.matmul(I1,P1)
             adj1 = np.matmul(mul_mat1.transpose(), self.graphs[exp_sam[i][5]].adj())
             adj1_ = np.matmul(adj1, mul_mat1)
-            feat1 = self.permu[0].reshape(1,self.nodes)
+            feat1 = exp_sam[i][0][0].reshape(1,self.graphs[exp_sam[i][5]].nodes_count())
             feat1_ = np.matmul(feat1, P1)
             feat1__ = np.repeat(feat1_.reshape(self.node_max,1), 2, axis=1)
             (I2,P2)=self.permutation_array(exp_sam[i][3])
             mul_mat2 = np.matmul(I2,P2)
             adj2 = np.matmul(mul_mat2.transpose(), self.graphs[exp_sam[i][5]].adj())
             adj2_ = np.matmul(adj2, mul_mat1)
-            feat2 = self.permu[0].reshape(1,self.nodes)
+            feat2 = exp_sam[i][3][0].reshape(1,self.graphs[exp_sam[i][5]].nodes_count())
             feat2_ = np.matmul(feat2, P2)
             feat2__ = np.repeat(feat2_.reshape(self.node_max,1), 2, axis=1)
 
@@ -235,14 +238,15 @@ class DQAgent:
             adj_tens[i] = torch.from_numpy(adj2_).type(torch.FloatTensor)
             l_aux_tens[i] = torch.tensor(exp_sam[i][6])
             aux_tens[i] = torch.tensor(exp_sam[i][7])
-
+            permus[i]=P2
         self.optimizer.zero_grad()
         m1=self.model.forward(feat_tens.to(self.device), adj_tens.to(self.device), aux_tens.to(self.device)).cpu()#feat
-        m2=torch.matmul(m1, P2.transpose)
+        m1.squeeze_(dim=-1)
         for i in range(self.minibatch_length):
+            m2=torch.matmul(m1[i], torch.tensor(permus[i].transpose(),dtype=torch.float))
             if done_tens[i]==0:
-                m0=torch.eq(m1[i],0)
-                m00=torch.masked_select(m1[i], m0)
+                m0=1-torch.eq(m2,0)
+                m00=torch.masked_select(m2, m0)
                 target[i] = torch.max(m00)#
         target *= self.gamma
         target += reward_tens#max should be selected among the active pts.
@@ -268,9 +272,9 @@ class DQAgent:
         for i in range(self.iter):
             done = (i+self.n_step > self.iter - 1)
             if done:
-                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.zpad, done, self.games, self.memory[i][4], self.memory[-1][4])
+                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.zpad, done, self.games, self.memory[i][3], self.memory[-1][3])
             else:
-                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.memory[i+self.n_step][0], done, self.games, self.memory[i][4], self.memory[i+self.n_step][4])
+                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.memory[i+self.n_step][0], done, self.games, self.memory[i][3], self.memory[i+self.n_step][3])
             self.memory_n.append(step_init)
             if not done: cum_reward += self.memory[i+self.n_step][2]
             cum_reward -= self.memory[i][2]

@@ -39,14 +39,14 @@ class S2V_QN_1(torch.nn.Module):
             cur_message = F.relu(merged_linear)
         
         xv1=torch.clone(xv[:,:,0])
-        y_potential = torch.matmul(xv1.transpose(1,2), cur_message).expand(minibatch_size,nbr_node,self.embed_dim)
+        y_potential = torch.matmul(xv1.unsqueeze(dim=1), cur_message).expand(minibatch_size,nbr_node,self.embed_dim)
         rep_y = torch.matmul(torch.diag_embed(xv1), cur_message) #Batched matmul
         embed_s_a = torch.cat((rep_y, y_potential), dim=-1)
         if self.reg_hidden > 0:
             hidden = torch.matmul(embed_s_a, self.h1_weight)
             last_output=F.relu(hidden)
         
-        q_pred=torch.matmul(torch.cat(last_output, aux, dim=-1), self.h2_weight)
+        q_pred=torch.matmul(torch.cat((last_output, aux.unsqueeze(dim=1).expand(-1,nbr_node,-1)), dim=-1), self.h2_weight)
         return q_pred
 
 class S2V_QN_2(torch.nn.Module):

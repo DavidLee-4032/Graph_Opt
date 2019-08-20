@@ -24,7 +24,7 @@ class Environment:
         self.nodes_selected = 0
         self.edge_cover_count = 0
         self.last_reward = 0
-        self.observation = torch.zeros(1,self.nodes_count,1,dtype=torch.float)
+        self.observation = torch.zeros(self.nodes_count,dtype=torch.float)
     def observe(self):
         """Returns the current observation that the agent can make
                  of the environment, if applicable.
@@ -37,23 +37,23 @@ class Environment:
         done=True
         edge_sum=0
         for edge in self.graph_init.edges():
-            if self.observation[:,edge[0],:]==0 and self.observation[:,edge[1],:]==0:
+            if self.observation[edge[0]]==0 and self.observation[edge[1]]==0:
                 done=False
             else:
                 edge_sum += 1
         return(done,edge_sum)
 
     def act(self,node):
-        self.observation[:,node,:]=1
+        self.observation[node]=1
         reward,done = self.get_reward(node)
         return reward,done
 
     def get_reward(self, node, observation=None):
-        if not observation: #This function can use inner or outer parameters
+        if observation is None: #This function can use inner or outer parameters
             observation=self.observation
 
         if self.name == "MVC":
-            nodes_selected=np.sum(observation[0].numpy())
+            nodes_selected=np.sum(observation.numpy())
             if self.nodes_selected != nodes_selected:
                 reward = -1
             else:
@@ -66,7 +66,7 @@ class Environment:
             reward=0
             done=False
             adj= self.graph_init.edges()
-            select_node=np.where(self.observation[0, :, 0].numpy() == 1)[0]
+            select_node=np.where(self.observation[:].numpy() == 1)[0]
             for nodes in adj:
                 if ((nodes[0] in select_node) & (nodes[1] not in select_node)) | ((nodes[0] not in select_node) & (nodes[1] in select_node))  :
                     reward += 1#/20.0
