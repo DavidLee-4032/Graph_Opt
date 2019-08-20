@@ -19,7 +19,7 @@ class Environment:
     def reset(self, g):
         self.games = g
         self.graph_init = self.graphs[self.games]
-        self.nodes_count = self.graph_init.nodes()
+        self.nodes_count = self.graph_init.nodes_count()
         self.edges_count=self.graph_init.g.number_of_edges()
         self.nodes_selected = 0
         self.edge_cover_count = 0

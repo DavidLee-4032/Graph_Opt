@@ -24,7 +24,7 @@ class S2V_QN_1(torch.nn.Module):
             self.h2_weight = torch.nn.Parameter(torch.Tensor(self.reg_hidden + 3, 1))
         else:
             self.h2_weight = torch.nn.Parameter(2 * embed_dim, 1)
-		torch.nn.init.normal_(self.h2_weight, mean=0, std=0.01)
+        torch.nn.init.normal_(self.h2_weight, mean=0, std=0.01)
 
     def forward(self, xv, adj, aux):
         # When the nodes of graphs is changing, it won't work anymore.
@@ -34,7 +34,7 @@ class S2V_QN_1(torch.nn.Module):
         cur_message = F.relu(input_message)
         for t in range(self.T):
             n2npool = torch.matmul(adj, cur_message)
-            node_linear = torch.matmul(n2npool, p_node_conv)
+            node_linear = torch.matmul(n2npool, self.p_node_conv)
             merged_linear = torch.add(node_linear, input_message)
             cur_message = F.relu(merged_linear)
         
@@ -46,7 +46,7 @@ class S2V_QN_1(torch.nn.Module):
             hidden = torch.matmul(embed_s_a, self.h1_weight)
             last_output=F.relu(hidden)
         
-        q_pred=tf.matmul(torch.cat(last_output, aux, dim=-1), h2_weight)
+        q_pred=torch.matmul(torch.cat(last_output, aux, dim=-1), self.h2_weight)
         return q_pred
 
 class S2V_QN_2(torch.nn.Module):

@@ -241,7 +241,8 @@ class DQAgent:
             if done_tens[i]==0:
                 m0=torch.eq(m1[i],0)
                 m00=torch.masked_select(m1[i], m0)
-                target[i] = self.gamma*(torch.max(m0))#
+                target[i] = torch.max(m00)#
+        target *= self.gamma
         target += reward_tens#max should be selected among the active pts.
         target_p=torch.zeros_like(target)
         p_tensor=self.model(l_feat_tens.to(self.device), adj_tens.to(self.device), l_aux_tens.to(self.device)).cpu()#l_feat
