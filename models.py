@@ -17,15 +17,14 @@ class S2V_QN_1(torch.nn.Module):
         self.w_n2l = torch.nn.Parameter(torch.Tensor(2, embed_dim))
         torch.nn.init.normal_(self.w_n2l, mean=0, std=0.01)
         self.p_node_conv = torch.nn.Parameter(torch.Tensor(embed_dim, embed_dim))
-        torch.nn.init.normal_(self.p_node_conv.weight, mean=0, std=0.01)
-
+        torch.nn.init.normal_(self.p_node_conv, mean=0, std=0.01)
         if self.reg_hidden > 0:
             self.h1_weight = torch.nn.Parameter(torch.Tensor(2 * embed_dim, self.reg_hidden))
-            torch.nn.init.normal_(self.h1_weight.weight, mean=0, std=0.01)
+            torch.nn.init.normal_(self.h1_weight, mean=0, std=0.01)
             self.h2_weight = torch.nn.Parameter(torch.Tensor(self.reg_hidden + 3, 1))
         else:
             self.h2_weight = torch.nn.Parameter(2 * embed_dim, 1)
-        torch.nn.init.normal_(self.q.weight, mean=0, std=0.01)
+		torch.nn.init.normal_(self.h2_weight, mean=0, std=0.01)
 
     def forward(self, xv, adj, aux):
         # When the nodes of graphs is changing, it won't work anymore.
