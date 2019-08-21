@@ -112,7 +112,6 @@ class DQAgent:
 
         self.nodes = self.graphs[self.games].nodes_count()
         self.last_action = 0
-        #self.last_observation = torch.zeros(self.nodes, dtype=torch.int)
         self.last_reward = -0.01
         self.last_done = 0
         self.action = 0
@@ -185,7 +184,7 @@ class DQAgent:
                 q_a = self.model.forward(node_feat.to(self.device), adj2_tensor.to(self.device), aux_tensor.to(self.device)).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
                 q_a_np=q_a.squeeze_().numpy() #Avail_pts RATHER THAN observation for forward processing!!!
                 q_a0=np.matmul(q_a_np, P.transpose())
-                action = np.argmax(q_a0)
+                action = np.where((q_a0[:] == np.max(q_a0[:][self.permu[0,:] != 0])))[0][0]#argmax with max != 0
             # get the point cover ratio and edge cover ratio
             
             # Using LOCAL variables to prevent unexpected changes of variables
@@ -244,10 +243,10 @@ class DQAgent:
         m1.squeeze_(dim=-1)
         for i in range(self.minibatch_length):
             m2=torch.matmul(m1[i], torch.tensor(permus[i].transpose(),dtype=torch.float))
-            if done_tens[i]==0:
+            if done_tens[i]==0:#need to change to NON_ZERO max
                 m0=1-torch.eq(m2,0)
                 m00=torch.masked_select(m2, m0)
-                target[i] = torch.max(m00)#
+                target[i] = torch.max(m00)
         target *= self.gamma
         target += reward_tens#max should be selected among the active pts.
         target_p=torch.zeros_like(target)
@@ -272,7 +271,7 @@ class DQAgent:
         for i in range(self.iter):
             done = (i+self.n_step > self.iter - 1)
             if done:
-                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.zpad, done, self.games, self.memory[i][3], self.memory[-1][3])
+                step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.zpad, done, self.games, self.memory[i][3], [1.0*self.observation.sum().item(),1.0,1.0])
             else:
                 step_init = (self.memory[i][0], self.memory[i][1], cum_reward, self.memory[i+self.n_step][0], done, self.games, self.memory[i][3], self.memory[i+self.n_step][3])
             self.memory_n.append(step_init)

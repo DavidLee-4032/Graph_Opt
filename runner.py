@@ -19,9 +19,9 @@ class Runner:
         self.agent.graph_reset(graphs)
 
     def act(self):
-        (observation, aux) = self.agent.env.observe()#.clone()
+        (observation, aux) = self.agent.env.observe()
         self.agent.permutation(observation)
-        (reward, done) = self.agent.act(aux)#.copy()
+        (reward, done) = self.agent.act(aux)
         return (reward, done)
 
 
