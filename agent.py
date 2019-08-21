@@ -169,7 +169,7 @@ class DQAgent:
     def act(self, aux): # eps-greedy
         with torch.no_grad():
             if self.epsilon_ > np.random.rand():
-                action = np.random.choice(np.where(self.permu[0,:] == 1)[0])
+                action = int(np.random.choice(np.where(self.permu[0,:] == 1)[0]))
             else:
                 (I,P)=self.permutation_array()
                 mul_mat = np.matmul(I,P)
@@ -184,9 +184,14 @@ class DQAgent:
                 q_a = self.model.forward(node_feat.to(self.device), adj2_tensor.to(self.device), aux_tensor.to(self.device)).cpu() #forward propagate only, ADJ here should be ADJ_subgraph
                 q_a_np=q_a.squeeze_().numpy() #Avail_pts RATHER THAN observation for forward processing!!!
                 q_a0=np.matmul(q_a_np, P.transpose())
-                action = np.where((q_a0[:] == np.max(q_a0[:][self.permu[0,:] != 0])))[0][0]#argmax with max != 0
+                max_value=float("-inf")
+                for i in range(self.nodes):
+                    if self.permu[0,i] == 0:
+                        continue
+                    if q_a0[i]>max_value:
+                        max_value=q_a0[i]
+                        action=i
             # get the point cover ratio and edge cover ratio
-            
             # Using LOCAL variables to prevent unexpected changes of variables
             (reward,done) = self.env.act(action)
             self.remember(self.permu.copy(), action, reward, aux)
@@ -229,7 +234,7 @@ class DQAgent:
             feat2__ = np.repeat(feat2_.reshape(self.node_max,1), 2, axis=1)
 
             l_feat_tens[i]=torch.tensor(feat1__)#torch.zeros(1, 2).scatter_(1, exp_sam[i][0], 1)
-            action_tens[i]=exp_sam[i][1].item()
+            action_tens[i]=exp_sam[i][1]
             reward_tens[i]=exp_sam[i][2]
             feat_tens[i]=torch.tensor(feat2__)#torch.zeros(1, 2).scatter_(1, exp_sam[i][3], 1)
             done_tens[i]=int(exp_sam[i][4])

@@ -32,7 +32,7 @@ parser.add_argument('--epoch', type=int, metavar='nepoch',default=1, help="numbe
 parser.add_argument('--lr',type=float, default=1e-6,help="learning rate")
 parser.add_argument('--bs',type=int,default=128,help="minibatch experience size for training")
 parser.add_argument('--n_step',type=int, default='5',help="n steps in RL")
-parser.add_argument('--node_min', type=int, metavar='nnode',default='20', help="number of node in generated graphs")
+parser.add_argument('--node_min', type=int, metavar='nnode',default='18', help="number of node in generated graphs")
 parser.add_argument('--node_max', type=int, metavar='nnode',default='20', help="number of node in generated graphs")
 parser.add_argument('--p',default=0.14,help="p, parameter in graph degree distribution")
 parser.add_argument('--m',default=4,help="m, parameter in graph degree distribution")
