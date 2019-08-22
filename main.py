@@ -29,7 +29,7 @@ parser.add_argument('--model', type=str, default='S2V_QN_1', help='model name')
 parser.add_argument('--ngames', type=int, metavar='n', default='500', help='number of games to simulate')
 parser.add_argument('--niter', type=int, metavar='n', default='1000', help='max number of iterations per game')
 parser.add_argument('--epoch', type=int, metavar='nepoch',default=1, help="number of epochs")#change to 201
-parser.add_argument('--lr',type=float, default=1e-4,help="learning rate")
+parser.add_argument('--lr',type=float, default=1e-6,help="learning rate")
 parser.add_argument('--bs',type=int,default=128,help="minibatch experience size for training")
 parser.add_argument('--n_step',type=int, default='5',help="n steps in RL")
 parser.add_argument('--node_min', type=int, metavar='nnode',default='18', help="number of node in generated graphs")
