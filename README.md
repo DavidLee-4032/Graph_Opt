@@ -13,7 +13,7 @@ Source of the Dai and al. paper:
 
 The code is mainly refered to Louis's code: https://github.com/louisv123/COLGE, some details are from Dai's code:https://github.com/Hanjun-Dai/graph_comb_opt, with a little personal modifier.
 
-I finally got a approximate ratio of 1.27 (in the worst case) and average ratio of 1.04 
+I finally got an approximation ratio of 1.27 (in the worst case) and average ratio of 1.04 
 Better than the origin torch code and worse than the c++ code of Dai.
 
 ## Introduction
