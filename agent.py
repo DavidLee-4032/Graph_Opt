@@ -60,6 +60,7 @@ class DQAgent:
 
             args_init = load_model_config()[self.model_name]
             self.model = models.S2V_QN_1(**args_init)
+            self.old_model = models.S2V_QN_1(**args_init)
 
         elif self.model_name == 'S2V_QN_2':
             args_init = load_model_config()[self.model_name]
@@ -85,23 +86,23 @@ class DQAgent:
         if torch.cuda.device_count() >= 1:
             print("Using", torch.cuda.device_count(), "GPUs!")
             self.model.to(self.device)
+            self.old_model.to(self.device)
             torch.backends.cudnn.benchmark = True
             
         else: print("Using CPU")
 
         self.criterion = torch.nn.MSELoss(reduction='sum').to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        if torch.cuda.device_count() > 1: self.model = torch.nn.DataParallel(self.model)
-
+        if torch.cuda.device_count() > 1: 
+            self.model = torch.nn.DataParallel(self.model)
+            self.old_model = torch.nn.DataParallel(self.old_model)
 
 
     """
     p : embedding dimension
        
     """
-
     def reset(self, g):
-
         self.games = g
         self.env.reset(g)
         if (len(self.memory_n) != 0) and (len(self.memory_n) % 500000 == 0): #once memory comes to 500000, cut it down to 300000. Better if we make sure the RECENT datas to be preserved.
@@ -120,10 +121,10 @@ class DQAgent:
         self.done = 0
         self.iter = 0
         self.memory.clear()
-        
         self.zpad=np.zeros([2,self.nodes])
-        # you can use the auxiliary temp memory of the game and reset it here.
-
+        if (g+1)%200==0:
+            self.old_model.load_state_dict(self.model.state_dict())
+        #you can use the auxiliary temp memory of the game and reset it here.
     def permutation_array(self, permu=None):
         if permu is None:
             permu=self.permu
@@ -244,7 +245,7 @@ class DQAgent:
             aux_tens[i] = torch.tensor(exp_sam[i][7])
             permus[i]=P2
         self.optimizer.zero_grad()
-        m1=self.model.forward(feat_tens.to(self.device), adj_tens.to(self.device), aux_tens.to(self.device)).cpu()#feat
+        m1=self.old_model.forward(feat_tens.to(self.device), adj_tens.to(self.device), aux_tens.to(self.device)).cpu()#feat
         m1.squeeze_(dim=-1)
         for i in range(self.minibatch_length):
             m2=torch.matmul(m1[i], torch.tensor(permus[i].transpose(),dtype=torch.float))
